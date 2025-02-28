@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "vectoratorinteractor"
+version = "0.1.0"
+description = ""
+authors = ["Justin Guese <guese.justin@gmail.com>"]
+readme = "README.md"
+packages = [{include = "vectoratorinteractor"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.115.10"
+requests = "^2.32.3"
+pydantic = "^2.10.6"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
