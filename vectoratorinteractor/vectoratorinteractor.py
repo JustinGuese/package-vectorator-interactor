@@ -31,13 +31,13 @@ class VectoratorInteractor:
         self.mainappname = mainappname
         self.vectoratorurl = vectoratorurl
 
-    def uploadDocuments(self, apporuser: str, project: str, files: List[UploadFile]):
+    def uploadDocuments(self, apporuser: str, project: str, files: List[UploadFile], highresmode: bool = False):
         url = self.vectoratorurl + f"/upload/{self.mainappname + "_" + apporuser}/{project}"
         newFiles = []
         for f in files:
             newFiles.append(('upload_files', (f.filename, f.file, f.content_type)))
 
-        response = requests.post(url,  files=newFiles)
+        response = requests.post(url,  files=newFiles, params={"highresmode": highresmode})
         response.raise_for_status()
 
         
