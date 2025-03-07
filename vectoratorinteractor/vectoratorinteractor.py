@@ -48,8 +48,7 @@ class VectoratorInteractor:
         return response.text.replace('"', "")
     
     def getCoverForBook(self, apporuser: str, project: str, filename: str) -> str:
-        filenameCover = filename.split(".")[0] + ".png"
-        url = self.vectoratorurl + f"/presigned_url/{self.mainappname + "_" + apporuser}/{project}/{filenameCover}"
+        url = self.vectoratorurl + f"/presigned_url/{self.mainappname + "_" + apporuser}/{project}/{filename + '.png'}"
         response = requests.get(url, params={"validityDays": 365})
         response.raise_for_status()
         return response.text.replace('"', "")
