@@ -46,6 +46,13 @@ class VectoratorInteractor:
         response = requests.get(url)
         response.raise_for_status()
         return response.text.replace('"', "")
+    
+    def getCoverForBook(self, apporuser: str, project: str, filename: str) -> str:
+        filenameCover = filename.split(".")[0] + ".png"
+        url = self.vectoratorurl + f"/cover/{self.mainappname + "_" + apporuser}/{project}/{filenameCover}"
+        response = requests.get(url, params={"validityDays": 365})
+        response.raise_for_status()
+        return response.text.replace('"', "")
 
     def question(self, question, user_id, project_name, messages: dict) -> ChatResponse:
         url = self.vectoratorurl + f"/question/{self.mainappname + "_" + user_id}/{project_name}"
