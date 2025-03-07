@@ -15,10 +15,10 @@ class SourceDocumentPD(BaseModel):
     fullpath: str
     filename: str
     title: str
+    summary: str
     content: str
     url: str
     url_expires_at: datetime
-
 
 class ChatResponse(BaseModel):
     question: str
