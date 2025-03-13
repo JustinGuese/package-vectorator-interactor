@@ -1,4 +1,6 @@
+import logging
 from datetime import datetime
+from time import sleep
 from typing import List
 
 import requests
@@ -52,8 +54,7 @@ class VectoratorInteractor:
         response.raise_for_status()
         return response.text.replace('"', "")
 
-    # returns a chat_id 
-    def question(self, question, apporuser, project_name, messages: dict) -> int:
+    def __submitQuestion(self, question, apporuser, project_name, messages: dict) -> int:
         url = self.vectoratorurl + f"/question/{self.mainappname + "_" + apporuser}/{project_name}"
         headers = {
             "accept": "application/json",
@@ -66,12 +67,34 @@ class VectoratorInteractor:
         response = requests.post(url, headers=headers, data=data)
         response.raise_for_status()
         return int(response.text)
+
+    # returns a chat_id 
+    def submitQuestion(self, question, apporuser, project_name, messages: dict) -> int:
+        return self.__submitQuestion(question, apporuser, project_name, messages)
     
-    def getChatResponse(self, chat_id: int) -> ChatResponse:
+    def __getChatResponse(self, chat_id: int) -> ChatResponse:
         url = self.vectoratorurl + f"/question/{chat_id}"
         response = requests.get(url)
         response.raise_for_status()
         return ChatResponse(**response.json())
+    
+    def getChatResponseForId(self, chat_id) -> ChatResponse:
+        resp = self.__getChatResponse(chat_id)
+        if resp.answer is None:
+            # still needs time
+            logging.debug("answer is not ready yet, wait")
+            sleep(2)
+            return self.getChatResponse(chat_id)
+        return resp
+    
+    def question(self, question, apporuser, project_name, messages: dict) -> ChatResponse:
+        chat_id = self.submitQuestion(question, apporuser, project_name, messages)
+        return self.getChatResponseForId(chat_id)
+
+    
+    def isChatResponseReady(self, chat_id: int) -> bool:
+        resp = self.__getChatResponse(chat_id)
+        return resp.answer is not None
 
 
     def deleteProjectFromBackend(self, apporuser: str, project: str):
