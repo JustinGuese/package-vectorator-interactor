@@ -72,19 +72,19 @@ class VectoratorInteractor:
     def submitQuestion(self, question, apporuser, project_name, messages: dict) -> int:
         return self.__submitQuestion(question, apporuser, project_name, messages)
     
-    def __getChatResponse(self, chat_id: int) -> ChatResponse:
+    def getChatResponseForId(self, chat_id: int) -> ChatResponse:
         url = self.vectoratorurl + f"/question/{chat_id}"
         response = requests.get(url)
         response.raise_for_status()
         return ChatResponse(**response.json())
     
-    def getChatResponseForId(self, chat_id) -> ChatResponse:
-        resp = self.__getChatResponse(chat_id)
+    def getChatResponseForIdWaitForFinish(self, chat_id) -> ChatResponse:
+        resp = self.getChatResponseForId(chat_id)
         if resp.answer is None:
             # still needs time
             logging.debug("answer is not ready yet, wait")
             sleep(2)
-            return self.getChatResponse(chat_id)
+            return self.getChatResponseForIdWaitForFinish(chat_id)
         return resp
     
     def question(self, question, apporuser, project_name, messages: dict) -> ChatResponse:
