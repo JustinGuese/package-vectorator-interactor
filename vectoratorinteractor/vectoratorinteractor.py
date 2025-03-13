@@ -22,7 +22,6 @@ class SourceDocumentPD(BaseModel):
 
 class ChatResponse(BaseModel):
     question: str
-    chat_history: List[Message]
     answer: str
     source_documents: List[SourceDocumentPD]
 
@@ -53,7 +52,8 @@ class VectoratorInteractor:
         response.raise_for_status()
         return response.text.replace('"', "")
 
-    def question(self, question, apporuser, project_name, messages: dict) -> ChatResponse:
+    # returns a chat_id 
+    def question(self, question, apporuser, project_name, messages: dict) -> int:
         url = self.vectoratorurl + f"/question/{self.mainappname + "_" + apporuser}/{project_name}"
         headers = {
             "accept": "application/json",
@@ -64,6 +64,12 @@ class VectoratorInteractor:
             "message_history": messages,
         }
         response = requests.post(url, headers=headers, data=data)
+        response.raise_for_status()
+        return int(response.text)
+    
+    def getChatResponse(self, chat_id: int) -> ChatResponse:
+        url = self.vectoratorurl + f"/question/{chat_id}"
+        response = requests.get(url)
         response.raise_for_status()
         return ChatResponse(**response.json())
 
