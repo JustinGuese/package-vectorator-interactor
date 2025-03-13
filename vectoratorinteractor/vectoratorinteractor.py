@@ -29,7 +29,6 @@ class ChatResponsePD(BaseModel):
     source_documents: List[SourceDocumentPD] = []
     apporuser: str | None = None
     project: str | None = None
-    subscription: str | None = None
 
 
 class VectoratorInteractor:
@@ -80,7 +79,11 @@ class VectoratorInteractor:
         return response.text.replace('"', "")
 
     def __submitQuestion(
-        self, question, apporuser, project_name, messages: dict
+        self,
+        question,
+        apporuser,
+        project_name,
+        messages: dict,
     ) -> int:
         url = (
             self.vectoratorurl
