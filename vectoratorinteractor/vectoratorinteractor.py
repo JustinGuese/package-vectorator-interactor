@@ -27,6 +27,9 @@ class ChatResponsePD(BaseModel):
     question: str
     answer: str | None = None
     source_documents: List[SourceDocumentPD] = []
+    apporuser: str | None = None
+    project: str | None = None
+    subscription: str | None = None
 
 
 class VectoratorInteractor:
