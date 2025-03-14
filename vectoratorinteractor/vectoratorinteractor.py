@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 from time import sleep
@@ -95,7 +96,7 @@ class VectoratorInteractor:
         }
         data = {
             "question": question,
-            "message_history": messages,
+            "message_history": json.dumps(messages),
         }
         response = requests.post(url, headers=headers, data=data)
         response.raise_for_status()
