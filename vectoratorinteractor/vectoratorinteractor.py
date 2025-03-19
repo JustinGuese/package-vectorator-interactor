@@ -1,4 +1,5 @@
 import enum
+import json
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -145,18 +146,15 @@ class VectoratorInteractor:
         response.raise_for_status()
         return [ChatWithMessages(**chat) for chat in response.json()]
 
-    def getChat(self, apporuser: str, project: str, chat_id: int) -> ChatWithMessages:
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chat_id}"
-        )
+    def getChat(self, chat_id: int) -> ChatWithMessages:
+        url = self.vectoratorurl + f"/chat/{chat_id}"
         response = requests.get(url)
         response.raise_for_status()
         return ChatWithMessages(**response.json())
 
     def createChat(self, chat: NewChat) -> ChatWithMessages:
         url = self.vectoratorurl + f"/chat/"
-        response = requests.post(url, json=chat.model_dump())
+        response = requests.post(url, json=json.loads(chat.model_dump_json()))
         response.raise_for_status()
         return ChatWithMessages(**response.json())
 
@@ -167,7 +165,7 @@ class VectoratorInteractor:
             self.vectoratorurl
             + f"/chat/message/{self.mainappname + '_' + apporuser}/{project}"
         )
-        response = requests.put(url, json=message.model_dump())
+        response = requests.put(url, json=message.model_dump_json())
         response.raise_for_status()
         return ChatWithMessages(**response.json())
 
@@ -189,18 +187,19 @@ class VectoratorInteractor:
                 project,
                 ChatMessage(chat_id=chat_id, message=question, persona=Persona.user),
             )
-            chat = self.getChat(apporuser, project, chat_id)
+            chat = self.getChat(chat_id)
         else:
             newChat = NewChat(
+                name="new chat",
                 apporuser=apporuser,
                 project=project,
-                messages=[ChatMessage(message=question, persona=Persona.user)],
+                messages=[{"message": question, "persona": "user"}],
             )
             chat = self.createChat(newChat)
         maxtries = 30
         crntTry = 0
         while chat.processing_state != ProcessingState.DONE and crntTry < maxtries:
-            chat = self.getChat(apporuser, project, chat.id)
+            chat = self.getChat(chat.id)
             maxtries -= 1
         assert chat.processing_state == ProcessingState.DONE
         return chat
