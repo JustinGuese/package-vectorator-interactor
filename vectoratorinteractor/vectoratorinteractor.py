@@ -1,79 +1,19 @@
-import enum
 import json
-from datetime import datetime
-from typing import Dict, List, Optional
+from datetime import date
+from typing import List
 
 import requests
 from fastapi import UploadFile
-from pydantic import BaseModel
-from sqlmodel import JSON, Column, Field, Relationship, SQLModel
 
-
-class SummaryStore(SQLModel, table=True):
-    id: str | None = Field(default=None, primary_key=True)
-    summary: str = Field(nullable=False)
-
-
-class ProcessingState(enum.Enum):
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    DONE = "DONE"
-    FAILED = "FAILED"
-
-
-class Persona(enum.Enum):
-    agent = "agent"
-    user = "user"
-
-
-class QuestionsStore(SQLModel, table=True):
-    question: str = Field(primary_key=True, index=True, nullable=False)
-    message_id: Optional[int] = Field(default=None, foreign_key="chatmessage.id")
-    answer: Optional[str] = Field(default=None)
-    message: Optional["ChatMessage"] = Relationship()
-    project: str = Field(primary_key=True, index=True, nullable=False)
-    apporuser: str = Field(primary_key=True, index=True, nullable=False)
-    source_documents: Dict | None = Field(default_factory=dict, sa_column=Column(JSON))
-
-
-class Chat(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(default="new chat", nullable=False)
-    apporuser: str = Field(nullable=False)
-    project: str = Field(nullable=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    processing_state: ProcessingState = Field(
-        nullable=False,
-        default=ProcessingState.DONE,
-    )
-    messages: list["ChatMessage"] = Relationship(back_populates="chat")
-
-
-class ChatMessage(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    chat_id: int | None = Field(default=None, foreign_key="chat.id")
-    chat: Chat | None = Relationship(back_populates="messages")
-    message: str = Field(nullable=False)
-    persona: Persona = Field(nullable=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    source_documents: Dict | None = Field(default_factory=dict, sa_column=Column(JSON))
-
-
-class ChatWithMessages(BaseModel):
-    id: int
-    name: str
-    apporuser: str
-    project: str
-    created_at: datetime
-    processing_state: ProcessingState
-    messages: List[ChatMessage] = []
-
-
-class NewChat(BaseModel):
-    name: str
-    apporuser: str
-    project: str
-    messages: List[ChatMessage] = []
+from vectoratorinteractor.models import (
+    ChatMessage,
+    ChatWithMessagesPD,
+    DocumentUploadRequest,
+    NewChatPD,
+    Persona,
+    ProcessingState,
+    Project,
+)
 
 
 class VectoratorInteractor:
@@ -94,7 +34,7 @@ class VectoratorInteractor:
     ):
         url = (
             self.vectoratorurl
-            + f"/upload/{self.mainappname + "_" + apporuser}/{project}"
+            + f"/upload/{self.mainappname + '_' + apporuser}/{project}"
         )
         newFiles = []
         for f in files:
@@ -105,10 +45,60 @@ class VectoratorInteractor:
         )
         response.raise_for_status()
 
+    def getUploadRequests(
+        self, apporuser: str, project: str
+    ) -> List[DocumentUploadRequest]:
+        url = (
+            self.vectoratorurl
+            + f"/uploadrequests/{self.mainappname + '_' + apporuser}/{project}"
+        )
+        response = requests.get(url)
+        response.raise_for_status()
+        return [DocumentUploadRequest(**req) for req in response.json()]
+
+    def getProjects(self, apporuser: str) -> List[str]:
+        url = self.vectoratorurl + f"/projects/{self.mainappname + '_' + apporuser}/"
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
+
+    def createProject(self, apporuser: str, project: str) -> Project:
+        url = (
+            self.vectoratorurl
+            + f"/projects/{self.mainappname + '_' + apporuser}/{project}"
+        )
+        response = requests.post(url)
+        response.raise_for_status()
+        return Project(**response.json())
+
+    def listFiles(self, apporuser: str, project: str) -> List[str]:
+        url = (
+            self.vectoratorurl
+            + f"/files/{self.mainappname + '_' + apporuser}/{project}"
+        )
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
+
     def getPresignedUrl(self, apporuser: str, project: str, filename: str) -> str:
         url = (
             self.vectoratorurl
-            + f"/presigned_url/{self.mainappname + "_" + apporuser}/{project}/{filename}"
+            + f"/presigned_url/{self.mainappname + '_' + apporuser}/{project}/{filename}"
+        )
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.text.replace('"', "")
+
+    def getPdfPagePicture(
+        self, apporuser: str, project: str, pdffilename: str, page: int
+    ):
+        assert pdffilename.endswith(".pdf")
+        justfilename = pdffilename[:-4]
+        if "/" in justfilename:
+            justfilename = justfilename.split("/")[-1]
+        url = (
+            self.vectoratorurl
+            + f"/presigned_url/{self.mainappname + '_' + apporuser}/{project}/{justfilename}/{page}.png"
         )
         response = requests.get(url)
         response.raise_for_status()
@@ -117,70 +107,84 @@ class VectoratorInteractor:
     def getCoverForBook(self, apporuser: str, project: str, filename: str) -> str:
         url = (
             self.vectoratorurl
-            + f"/presigned_url/{self.mainappname + "_" + apporuser}/{project}/{filename + '.png'}"
+            + f"/presigned_url/{self.mainappname + '_' + apporuser}/{project}/{filename + '.png'}"
         )
         response = requests.get(url)
         response.raise_for_status()
         return response.text.replace('"', "")
 
     def deleteProjectFromBackend(self, apporuser: str, project: str):
-        url = self.vectoratorurl + f"/{self.mainappname + "_" + apporuser}/{project}"
+        url = self.vectoratorurl + f"/{self.mainappname + '_' + apporuser}/{project}"
         response = requests.delete(url)
         response.raise_for_status()
 
     def quicksearch(self, apporuser: str, project: str, query: str) -> ChatMessage:
         url = (
             self.vectoratorurl
-            + f"/quicksearch/{self.mainappname + "_" + apporuser}/{project}/{query}"
+            + f"/quicksearch/{self.mainappname + '_' + apporuser}/{project}/{query}"
         )
         response = requests.get(url)
         response.raise_for_status()
         return ChatMessage(**response.json())
 
     ### Chat routes
-    def getChats(self, apporuser: str, project: str) -> List[ChatWithMessages]:
+    def getChats(self, apporuser: str, project: str) -> List[ChatWithMessagesPD]:
         url = (
-            self.vectoratorurl + f"/chat/{self.mainappname + "_" + apporuser}/{project}"
+            self.vectoratorurl + f"/chat/{self.mainappname + '_' + apporuser}/{project}"
         )
         response = requests.get(url)
         response.raise_for_status()
-        return [ChatWithMessages(**chat) for chat in response.json()]
+        return [ChatWithMessagesPD(**chat) for chat in response.json()]
 
-    def getChat(self, chat_id: int) -> ChatWithMessages:
+    def getChat(self, chat_id: int) -> ChatWithMessagesPD:
         url = self.vectoratorurl + f"/chat/{chat_id}"
         response = requests.get(url)
         response.raise_for_status()
-        return ChatWithMessages(**response.json())
+        return ChatWithMessagesPD(**response.json())
 
-    def createChat(self, chat: NewChat) -> ChatWithMessages:
-        url = self.vectoratorurl + f"/chat/"
+    def createChat(self, chat: NewChatPD) -> ChatWithMessagesPD:
+        url = self.vectoratorurl + "/chat/"
         response = requests.post(url, json=json.loads(chat.model_dump_json()))
         response.raise_for_status()
-        return ChatWithMessages(**response.json())
+        return ChatWithMessagesPD(**response.json())
 
     def addMessage(
         self, apporuser: str, project: str, message: ChatMessage
-    ) -> ChatWithMessages:
+    ) -> ChatWithMessagesPD:
         url = (
             self.vectoratorurl
             + f"/chat/message/{self.mainappname + '_' + apporuser}/{project}"
         )
         response = requests.put(url, json=message.model_dump_json())
         response.raise_for_status()
-        return ChatWithMessages(**response.json())
+        return ChatWithMessagesPD(**response.json())
 
-    def deleteChat(self, apporuser: str, project: str, chat_id: int):
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chat_id}"
-        )
+    def deleteChat(self, chat_id: int):
+        url = self.vectoratorurl + f"/chat/{chat_id}"
         response = requests.delete(url)
         response.raise_for_status()
 
+    def simpleQuestion(
+        self,
+        apporuser,
+        project,
+        question,
+    ) -> int:
+        # returns chat id which can be used to query getChat until result
+        NewChatPD = NewChatPD(
+            name="new chat" + date.today().isoformat(),
+            apporuser=self.mainappname + "_" + apporuser,
+            project=project,
+            messages=[{"message": question, "persona": "user"}],
+        )
+
+        chat = self.createChat(NewChatPD)
+        return chat.id
+
     # simplified question route
-    def question(
+    def questionWaitUntilFinished(
         self, apporuser: str, project: str, question: str, chat_id: int = None
-    ) -> ChatWithMessages:
+    ) -> ChatWithMessagesPD:
         if chat_id is not None:
             self.addMessage(
                 apporuser,
@@ -189,17 +193,17 @@ class VectoratorInteractor:
             )
             chat = self.getChat(chat_id)
         else:
-            newChat = NewChat(
-                name="new chat",
-                apporuser=apporuser,
+            NewChatPD = NewChatPD(
+                name="new chat" + date.today().isoformat(),
+                apporuser=self.mainappname + "_" + apporuser,
                 project=project,
                 messages=[{"message": question, "persona": "user"}],
             )
-            chat = self.createChat(newChat)
+            chat = self.createChat(NewChatPD)
         maxtries = 30
         crntTry = 0
         while chat.processing_state != ProcessingState.DONE and crntTry < maxtries:
             chat = self.getChat(chat.id)
-            maxtries -= 1
+            crntTry += 1
         assert chat.processing_state == ProcessingState.DONE
         return chat
