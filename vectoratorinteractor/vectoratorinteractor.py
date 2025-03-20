@@ -3,7 +3,7 @@ from datetime import date
 from typing import List
 
 import requests
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 
 from vectoratorinteractor.models import (
     ChatMessage,
@@ -43,7 +43,8 @@ class VectoratorInteractor:
         response = requests.post(
             url, files=newFiles, params={"highresmode": highresmode}
         )
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
 
     def getUploadRequests(
         self, apporuser: str, project: str
@@ -53,13 +54,15 @@ class VectoratorInteractor:
             + f"/uploadrequests/{self.mainappname + '_' + apporuser}/{project}"
         )
         response = requests.get(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return [DocumentUploadRequest(**req) for req in response.json()]
 
     def getProjects(self, apporuser: str) -> List[str]:
         url = self.vectoratorurl + f"/projects/{self.mainappname + '_' + apporuser}/"
         response = requests.get(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.json()
 
     def createProject(self, apporuser: str, project: str) -> Project:
@@ -68,7 +71,8 @@ class VectoratorInteractor:
             + f"/projects/{self.mainappname + '_' + apporuser}/{project}"
         )
         response = requests.post(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return Project(**response.json())
 
     def listFiles(self, apporuser: str, project: str) -> List[str]:
@@ -77,7 +81,8 @@ class VectoratorInteractor:
             + f"/files/{self.mainappname + '_' + apporuser}/{project}"
         )
         response = requests.get(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.json()
 
     def getPresignedUrl(self, apporuser: str, project: str, filename: str) -> str:
@@ -86,7 +91,8 @@ class VectoratorInteractor:
             + f"/presigned_url/{self.mainappname + '_' + apporuser}/{project}/{filename}"
         )
         response = requests.get(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.text.replace('"', "")
 
     def getPdfPagePicture(
@@ -101,7 +107,8 @@ class VectoratorInteractor:
             + f"/presigned_url/{self.mainappname + '_' + apporuser}/{project}/{justfilename}/{page}.png"
         )
         response = requests.get(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.text.replace('"', "")
 
     def getCoverForBook(self, apporuser: str, project: str, filename: str) -> str:
@@ -110,13 +117,15 @@ class VectoratorInteractor:
             + f"/presigned_url/{self.mainappname + '_' + apporuser}/{project}/{filename + '.png'}"
         )
         response = requests.get(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.text.replace('"', "")
 
     def deleteProjectFromBackend(self, apporuser: str, project: str):
         url = self.vectoratorurl + f"/{self.mainappname + '_' + apporuser}/{project}"
         response = requests.delete(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
 
     def quicksearch(self, apporuser: str, project: str, query: str) -> ChatMessage:
         url = (
@@ -124,7 +133,8 @@ class VectoratorInteractor:
             + f"/quicksearch/{self.mainappname + '_' + apporuser}/{project}/{query}"
         )
         response = requests.get(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return ChatMessage(**response.json())
 
     ### Chat routes
@@ -133,19 +143,25 @@ class VectoratorInteractor:
             self.vectoratorurl + f"/chat/{self.mainappname + '_' + apporuser}/{project}"
         )
         response = requests.get(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return [ChatWithMessagesPD(**chat) for chat in response.json()]
 
-    def getChat(self, chat_id: int) -> ChatWithMessagesPD:
-        url = self.vectoratorurl + f"/chat/{chat_id}"
+    def getChat(self, apporuser: str, project: str, chat_id: int) -> ChatWithMessagesPD:
+        url = (
+            self.vectoratorurl
+            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chat_id}"
+        )
         response = requests.get(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return ChatWithMessagesPD(**response.json())
 
     def createChat(self, chat: NewChatPD) -> ChatWithMessagesPD:
         url = self.vectoratorurl + "/chat/"
         response = requests.post(url, json=json.loads(chat.model_dump_json()))
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return ChatWithMessagesPD(**response.json())
 
     def addMessage(
@@ -156,13 +172,18 @@ class VectoratorInteractor:
             + f"/chat/message/{self.mainappname + '_' + apporuser}/{project}"
         )
         response = requests.put(url, json=message.model_dump_json())
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
         return ChatWithMessagesPD(**response.json())
 
-    def deleteChat(self, chat_id: int):
-        url = self.vectoratorurl + f"/chat/{chat_id}"
+    def deleteChat(self, apporuser: str, project: str, chat_id: int):
+        url = (
+            self.vectoratorurl
+            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chat_id}"
+        )
         response = requests.delete(url)
-        response.raise_for_status()
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
 
     def simpleQuestion(
         self,
