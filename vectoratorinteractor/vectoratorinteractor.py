@@ -171,7 +171,7 @@ class VectoratorInteractor:
             self.vectoratorurl
             + f"/chat/message/{self.mainappname + '_' + apporuser}/{project}"
         )
-        response = requests.put(url, json=message.model_dump_json())
+        response = requests.put(url, json=json.loads(message.model_dump_json()))
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return ChatWithMessagesPD(**response.json())
@@ -187,19 +187,19 @@ class VectoratorInteractor:
 
     def simpleQuestion(
         self,
-        apporuser,
-        project,
-        question,
+        apporuser: str,
+        project: str,
+        question: str,
     ) -> int:
         # returns chat id which can be used to query getChat until result
-        NewChatPD = NewChatPD(
-            name="new chat" + date.today().isoformat(),
+        new_chat = NewChatPD(
+            name="new chat " + date.today().isoformat(),
             apporuser=self.mainappname + "_" + apporuser,
             project=project,
-            messages=[{"message": question, "persona": "user"}],
+            messages=[ChatMessage(message=question, persona=Persona.user)],
         )
 
-        chat = self.createChat(NewChatPD)
+        chat = self.createChat(new_chat)
         return chat.id
 
     # simplified question route
@@ -207,24 +207,28 @@ class VectoratorInteractor:
         self, apporuser: str, project: str, question: str, chat_id: int = None
     ) -> ChatWithMessagesPD:
         if chat_id is not None:
-            self.addMessage(
-                apporuser,
-                project,
-                ChatMessage(chat_id=chat_id, message=question, persona=Persona.user),
+            message = ChatMessage(
+                chat_id=chat_id, message=question, persona=Persona.user
             )
-            chat = self.getChat(chat_id)
+            chat = self.addMessage(apporuser, project, message)
         else:
-            NewChatPD = NewChatPD(
-                name="new chat" + date.today().isoformat(),
+            new_chat = NewChatPD(
+                name="new chat " + date.today().isoformat(),
                 apporuser=self.mainappname + "_" + apporuser,
                 project=project,
-                messages=[{"message": question, "persona": "user"}],
+                messages=[ChatMessage(message=question, persona=Persona.user)],
             )
-            chat = self.createChat(NewChatPD)
+            chat = self.createChat(new_chat)
+
         maxtries = 30
         crntTry = 0
         while chat.processing_state != ProcessingState.DONE and crntTry < maxtries:
-            chat = self.getChat(chat.id)
+            chat = self.getChat(apporuser, project, chat.id)
             crntTry += 1
-        assert chat.processing_state == ProcessingState.DONE
+
+        if chat.processing_state != ProcessingState.DONE:
+            raise HTTPException(
+                status_code=408, detail="Request timeout while processing chat"
+            )
+
         return chat
