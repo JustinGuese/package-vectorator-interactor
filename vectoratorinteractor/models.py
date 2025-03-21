@@ -1,14 +1,10 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel
-from sqlmodel import Field, Relationship, SQLModel
-
-
-class SummaryStore(SQLModel, table=True):
-    id: Optional[str] = Field(default=None, primary_key=True)
-    summary: str = Field(nullable=False)
+from sqlmodel import JSON, Column, Field, Relationship, SQLModel
 
 
 class ProcessingState(enum.Enum):
@@ -23,16 +19,6 @@ class Persona(enum.Enum):
     user = "user"
 
 
-class ChatMessageDocument(SQLModel, table=True):
-    chat_message_id: int = Field(foreign_key="chatmessage.id", primary_key=True)
-    document_id: int = Field(foreign_key="document.id", primary_key=True)
-
-
-class QuestionDocument(SQLModel, table=True):
-    question_id: int = Field(foreign_key="questionsstore.id", primary_key=True)
-    document_id: int = Field(foreign_key="document.id", primary_key=True)
-
-
 class Project(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(nullable=False)
@@ -41,7 +27,7 @@ class Project(SQLModel, table=True):
         back_populates="project"
     )
     chats: List["Chat"] = Relationship(back_populates="project")
-    documents: List["Document"] = Relationship(back_populates="project")
+    documents: List["FullDocument"] = Relationship(back_populates="project")
 
 
 class QuestionsStore(SQLModel, table=True):
@@ -50,9 +36,9 @@ class QuestionsStore(SQLModel, table=True):
     )  # Ensure primary key is defined
     question: str = Field(index=True, nullable=False)
     answer: Optional[str] = Field(default=None)
-    apporuser: str = Field(index=True, nullable=False)
-    documents: List["Document"] = Relationship(
-        back_populates="questions", link_model=QuestionDocument
+    apporuser: str = Field(nullable=False, index=True)
+    langchain_document_ids: List[str] = Field(
+        sa_column=Column(JSON, nullable=False, default=list)
     )
 
 
@@ -62,7 +48,9 @@ class Chat(SQLModel, table=True):
     apporuser: str = Field(nullable=False, index=True)
     project_id: int = Field(foreign_key="project.id")
     project: Project = Relationship(back_populates="chats")
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), nullable=False
+    )
     processing_state: ProcessingState = Field(
         nullable=False, default=ProcessingState.DONE
     )
@@ -73,11 +61,13 @@ class ChatMessage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     message: str = Field(nullable=False)
     persona: Persona = Field(nullable=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), nullable=False
+    )
     chat_id: Optional[int] = Field(default=None, foreign_key="chat.id")
     chat: Optional[Chat] = Relationship(back_populates="messages")
-    documents: List["Document"] = Relationship(
-        back_populates="chat_messages", link_model=ChatMessageDocument
+    langchain_document_ids: List[str] = Field(
+        sa_column=Column(JSON, nullable=False, default=list)
     )
 
 
@@ -87,26 +77,45 @@ class DocumentUploadRequest(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id")
     project: Project = Relationship(back_populates="document_upload_requests")
     processed: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    documents: List["Document"] = Relationship(back_populates="upload_request")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    errormessage: str | None = Field(default=None)
+    documents: List["FullDocument"] = Relationship(back_populates="upload_request")
 
 
-class Document(SQLModel, table=True):
-    id: Optional[int] = Field(
+class FullDocument(SQLModel, table=True):
+    id: int | None = Field(
         default=None, primary_key=True
     )  # Ensure primary key is defined
-    filename: str = Field(nullable=False)
+    filename: str = Field(nullable=False)  # == source
+
     apporuser: str = Field(nullable=False, index=True)
     project_id: int = Field(foreign_key="project.id")
     project: Project = Relationship(back_populates="documents")
     upload_request_id: int = Field(foreign_key="documentuploadrequest.id")
     upload_request: DocumentUploadRequest = Relationship(back_populates="documents")
-    chat_messages: List["ChatMessage"] = Relationship(
-        back_populates="documents", link_model=ChatMessageDocument
-    )
-    questions: List["QuestionsStore"] = Relationship(
-        back_populates="documents", link_model=QuestionDocument
-    )
+
+
+class LangchainDocumentPD(BaseModel):
+    id: UUID
+    filename: str
+    filetype: str
+    source: str
+    content: str
+    summary: str
+    url: str
+    cover_url: str
+    zoomed_in_url: str | None = None
+    page_number: int | None = None
+
+
+class ChatMessageWithDocumentsPD(BaseModel):
+    id: int
+    message: str
+    persona: Persona
+    created_at: datetime
+    documents: List[LangchainDocumentPD] = []
 
 
 class ChatWithMessagesPD(BaseModel):
@@ -116,7 +125,7 @@ class ChatWithMessagesPD(BaseModel):
     project: str
     created_at: datetime
     processing_state: ProcessingState
-    messages: List[ChatMessage] = []
+    messages: List[ChatMessageWithDocumentsPD] = []
 
 
 class NewChatPD(BaseModel):
