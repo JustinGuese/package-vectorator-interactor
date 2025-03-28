@@ -33,7 +33,7 @@ class VectoratorInteractor:
         project: str,
         files: List[UploadFile],
         highresmode: bool = False,
-    ):
+    ) -> DocumentUploadRequest:
         url = (
             self.vectoratorurl
             + f"/documents/{self.mainappname + '_' + apporuser}/{project}/upload/"
@@ -47,6 +47,7 @@ class VectoratorInteractor:
         )
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
+        return DocumentUploadRequest(**response.json())
 
     def getUploadRequests(
         self, apporuser: str, project: str
