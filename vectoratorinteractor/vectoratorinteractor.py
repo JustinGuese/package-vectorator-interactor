@@ -201,15 +201,14 @@ class VectoratorInteractor:
         return ProcessingState(response.json())
 
     def createChat(
-        self, apporuser: str, project: str, chat: NewChatPD
+        self, apporuser: str, project: str, chatname: str
     ) -> ChatWithMessagesPD:
         url = (
             self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/"
+            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chatname}"
         )
-        if self.mainappname not in chat.apporuser:
-            chat.apporuser = self.mainappname + "_" + chat.apporuser
-        response = requests.post(url, json=json.loads(chat.model_dump_json()))
+
+        response = requests.post(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return ChatWithMessagesPD(**response.json())
