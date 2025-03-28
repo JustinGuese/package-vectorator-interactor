@@ -36,7 +36,7 @@ class VectoratorInteractor:
     ):
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/upload/"
+            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/upload/"
         )
         newFiles = []
         for f in files:
@@ -53,7 +53,7 @@ class VectoratorInteractor:
     ) -> List[DocumentUploadRequest]:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/uploadrequests"
+            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/uploadrequests"
         )
         response = requests.get(url)
         if not response.ok:
@@ -77,7 +77,7 @@ class VectoratorInteractor:
     def listFiles(self, apporuser: str, project: str) -> List[str]:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/s3files"
+            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/s3files"
         )
         response = requests.get(url)
         if not response.ok:
@@ -89,7 +89,7 @@ class VectoratorInteractor:
     ) -> str:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/presigned_url/{filename}"
+            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/presigned_url/{filename}"
         )
         response = requests.get(url, params={"validityDays": validity_days})
         if not response.ok:
@@ -105,7 +105,7 @@ class VectoratorInteractor:
             justfilename = justfilename.split("/")[-1]
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/presigned_url/{justfilename}/{page}.png"
+            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/presigned_url/{justfilename}/{page}.png"
         )
         response = requests.get(url)
         if not response.ok:
@@ -115,7 +115,7 @@ class VectoratorInteractor:
     def getCoverForBook(self, apporuser: str, project: str, filename: str) -> str:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/presigned_url/{filename + '.png'}"
+            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/presigned_url/{filename + '.png'}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -131,7 +131,7 @@ class VectoratorInteractor:
     def quicksearch(self, apporuser: str, project: str, query: str) -> ChatMessage:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/quicksearch/{query}"
+            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/quicksearch/{query}"
         )
         response = requests.get(url)
         if not response.ok:
