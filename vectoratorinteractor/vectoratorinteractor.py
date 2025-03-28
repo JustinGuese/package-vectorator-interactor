@@ -9,6 +9,7 @@ from vectoratorinteractor.models import (
     ChatMessage,
     ChatWithMessagesPD,
     DocumentUploadRequest,
+    DocumentUploadRequestWithDocumentsPD,
     FullDocument,
     NewChatPD,
     NewMessagePD,
@@ -51,7 +52,7 @@ class VectoratorInteractor:
 
     def getUploadRequests(
         self, apporuser: str, project: str
-    ) -> List[DocumentUploadRequest]:
+    ) -> List[DocumentUploadRequestWithDocumentsPD]:
         url = (
             self.vectoratorurl
             + f"/documents/{self.mainappname + '_' + apporuser}/{project}/uploadrequests"
@@ -59,7 +60,19 @@ class VectoratorInteractor:
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return [DocumentUploadRequest(**req) for req in response.json()]
+        return [DocumentUploadRequestWithDocumentsPD(**req) for req in response.json()]
+
+    def getUploadRequestById(
+        self, apporuser: str, project: str, uploadrequest_id: int
+    ) -> DocumentUploadRequestWithDocumentsPD:
+        url = (
+            self.vectoratorurl
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/uploadrequests/{uploadrequest_id}"
+        )
+        response = requests.get(url)
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return DocumentUploadRequestWithDocumentsPD(**response.json())
 
     def getProjects(self, apporuser: str) -> List[str]:
         url = self.vectoratorurl + f"/projects/{self.mainappname + '_' + apporuser}/"

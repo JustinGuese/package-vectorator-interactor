@@ -90,6 +90,16 @@ class DocumentUploadRequest(SQLModel, table=True):
     documents: List["FullDocument"] = Relationship(back_populates="upload_request")
 
 
+class DocumentUploadRequestWithDocumentsPD(BaseModel):
+    id: int
+    apporuser: str
+    project: str
+    processed: bool
+    created_at: datetime
+    errormessage: str | None = None
+    documents: List["FullDocument"] = []
+
+
 class FullDocument(SQLModel, table=True):
     id: int | None = Field(
         default=None, primary_key=True
