@@ -55,6 +55,7 @@ class Chat(SQLModel, table=True):
         nullable=False, default=ProcessingState.DONE
     )
     messages: List["ChatMessage"] = Relationship(back_populates="chat")
+    errormessage: str | None = Field(default=None)
 
 
 class ChatMessage(SQLModel, table=True):
@@ -69,6 +70,11 @@ class ChatMessage(SQLModel, table=True):
     langchain_document_ids: List[str] = Field(
         sa_column=Column(JSON, nullable=False, default=list)
     )
+
+
+class NewMessagePD(BaseModel):
+    message: str
+    persona: Persona
 
 
 class DocumentUploadRequest(SQLModel, table=True):

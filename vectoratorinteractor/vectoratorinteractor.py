@@ -11,6 +11,7 @@ from vectoratorinteractor.models import (
     DocumentUploadRequest,
     FullDocument,
     NewChatPD,
+    NewMessagePD,
     Persona,
     ProcessingState,
     Project,
@@ -214,11 +215,11 @@ class VectoratorInteractor:
         return ChatWithMessagesPD(**response.json())
 
     def addMessage(
-        self, apporuser: str, project: str, message: ChatMessage
+        self, apporuser: str, project: str, chat_id: int, message: NewMessagePD
     ) -> ChatWithMessagesPD:
         url = (
             self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/message"
+            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chat_id}/message"
         )
         response = requests.put(url, json=json.loads(message.model_dump_json()))
         if not response.ok:
