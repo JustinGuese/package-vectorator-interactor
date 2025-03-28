@@ -36,7 +36,7 @@ class VectoratorInteractor:
     ):
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/upload/"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/upload/"
         )
         newFiles = []
         for f in files:
@@ -53,7 +53,7 @@ class VectoratorInteractor:
     ) -> List[DocumentUploadRequest]:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/uploadrequests"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/uploadrequests"
         )
         response = requests.get(url)
         if not response.ok:
@@ -77,7 +77,7 @@ class VectoratorInteractor:
     def listFiles(self, apporuser: str, project: str) -> List[str]:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/s3files"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/s3files"
         )
         response = requests.get(url)
         if not response.ok:
@@ -89,7 +89,7 @@ class VectoratorInteractor:
     ) -> str:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/presigned_url/{filename}"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/presigned_url/{filename}"
         )
         response = requests.get(url, params={"validityDays": validity_days})
         if not response.ok:
@@ -105,7 +105,7 @@ class VectoratorInteractor:
             justfilename = justfilename.split("/")[-1]
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/presigned_url/{justfilename}/{page}.png"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/presigned_url/{justfilename}/{page}.png"
         )
         response = requests.get(url)
         if not response.ok:
@@ -115,7 +115,7 @@ class VectoratorInteractor:
     def getCoverForBook(self, apporuser: str, project: str, filename: str) -> str:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/presigned_url/{filename + '.png'}"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/presigned_url/{filename + '.png'}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -131,7 +131,7 @@ class VectoratorInteractor:
     def quicksearch(self, apporuser: str, project: str, query: str) -> ChatMessage:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/quicksearch/{query}"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/quicksearch/{query}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -142,7 +142,7 @@ class VectoratorInteractor:
     def getDocuments(self, apporuser: str, project: str) -> List[FullDocument]:
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -152,7 +152,7 @@ class VectoratorInteractor:
     def getDocumentById(self, apporuser: str, project: str, document_id: int):
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/{document_id}"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/{document_id}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -162,7 +162,7 @@ class VectoratorInteractor:
     def deleteDocumentById(self, apporuser: str, project: str, document_id: int):
         url = (
             self.vectoratorurl
-            + f"/{self.mainappname + '_' + apporuser}/{project}/documents/{document_id}"
+            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/{document_id}"
         )
         response = requests.delete(url)
         if not response.ok:
