@@ -203,6 +203,18 @@ class VectoratorInteractor:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return ChatWithMessagesPD(**response.json())
 
+    def getChatByName(
+        self, apporuser: str, project: str, chatname: str
+    ) -> ChatWithMessagesPD:
+        url = (
+            self.vectoratorurl
+            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/by_name/{chatname}"
+        )
+        response = requests.get(url)
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return ChatWithMessagesPD(**response.json())
+
     def getChatStatus(
         self, apporuser: str, project: str, chat_id: int
     ) -> ProcessingState:
