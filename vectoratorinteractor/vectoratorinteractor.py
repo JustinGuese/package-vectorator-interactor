@@ -22,22 +22,38 @@ from vectoratorinteractor.models import (
 class VectoratorInteractor:
     def __init__(
         self,
-        mainappname: str,
+        mainappname: str = "vinteractor",
+        apporuserdefault: str = "",
         vectoratorurl: str = "http://vectorator-service.vectorator.svc.cluster.local:8000",
     ):
         self.mainappname = mainappname
         self.vectoratorurl = vectoratorurl
+        self.apporuserdefault = apporuserdefault
+
+    def __getOrRaiseApporuserConstructor(self, apporuser: str):
+        if (
+            apporuser == ""
+            and self.mainappname == "vinteractor"
+            and self.apporuserdefault == ""
+        ):
+            raise ValueError(
+                "if self.mainappname and self.apporuserdefault are default you have to pass apporuser!"
+            )
+        elif apporuser is not None and apporuser != "":
+            return self.mainappname + "_" + apporuser
+        else:
+            return self.mainappname + "_" + self.apporuserdefault
 
     def uploadDocuments(
         self,
-        apporuser: str,
         project: str,
         files: List[UploadFile],
+        apporuser: str = "",
         highresmode: bool = False,
     ) -> DocumentUploadRequest:
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/upload/"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/upload/"
         )
         newFiles = []
         for f in files:
@@ -51,11 +67,11 @@ class VectoratorInteractor:
         return DocumentUploadRequest(**response.json())
 
     def getUploadRequests(
-        self, apporuser: str, project: str
+        self, project: str, apporuser: str = ""
     ) -> List[DocumentUploadRequestWithDocumentsPD]:
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/uploadrequests"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/uploadrequests"
         )
         response = requests.get(url)
         if not response.ok:
@@ -63,11 +79,11 @@ class VectoratorInteractor:
         return [DocumentUploadRequestWithDocumentsPD(**req) for req in response.json()]
 
     def getUploadRequestById(
-        self, apporuser: str, project: str, uploadrequest_id: int
+        self, project: str, uploadrequest_id: int, apporuser: str = ""
     ) -> DocumentUploadRequestWithDocumentsPD:
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/uploadrequests/{uploadrequest_id}"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/uploadrequests/{uploadrequest_id}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -75,23 +91,29 @@ class VectoratorInteractor:
         return DocumentUploadRequestWithDocumentsPD(**response.json())
 
     def getProjects(self, apporuser: str) -> List[str]:
-        url = self.vectoratorurl + f"/projects/{self.mainappname + '_' + apporuser}/"
+        url = (
+            self.vectoratorurl
+            + f"/projects/{self.__getOrRaiseApporuserConstructor(apporuser)}/"
+        )
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.json()
 
-    def createProject(self, apporuser: str, project: str) -> Project:
-        url = self.vectoratorurl + f"/{self.mainappname + '_' + apporuser}/{project}/"
+    def createProject(self, project: str, apporuser: str = "") -> Project:
+        url = (
+            self.vectoratorurl
+            + f"/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/"
+        )
         response = requests.post(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return Project(**response.json())
 
-    def listFiles(self, apporuser: str, project: str) -> List[str]:
+    def listFiles(self, project: str, apporuser: str = "") -> List[str]:
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/s3files"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/s3files"
         )
         response = requests.get(url)
         if not response.ok:
@@ -99,11 +121,11 @@ class VectoratorInteractor:
         return response.json()
 
     def getPresignedUrl(
-        self, apporuser: str, project: str, filename: str, validity_days: int = 7
+        self, project: str, filename: str, apporuser: str = "", validity_days: int = 7
     ) -> str:
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/presigned_url/{filename}"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/presigned_url/{filename}"
         )
         response = requests.get(url, params={"validityDays": validity_days})
         if not response.ok:
@@ -111,7 +133,7 @@ class VectoratorInteractor:
         return response.text.replace('"', "")
 
     def getPdfPagePicture(
-        self, apporuser: str, project: str, pdffilename: str, page: int
+        self, project: str, pdffilename: str, page: int, apporuser: str = ""
     ):
         assert pdffilename.endswith(".pdf")
         justfilename = pdffilename[:-4]
@@ -119,33 +141,36 @@ class VectoratorInteractor:
             justfilename = justfilename.split("/")[-1]
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/presigned_url/{justfilename}/{page}.png"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/presigned_url/{justfilename}/{page}.png"
         )
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.text.replace('"', "")
 
-    def getCoverForBook(self, apporuser: str, project: str, filename: str) -> str:
+    def getCoverForBook(self, project: str, filename: str, apporuser: str = "") -> str:
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/presigned_url/{filename + '.png'}"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/presigned_url/{filename + '.png'}"
         )
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.text.replace('"', "")
 
-    def deleteProjectFromBackend(self, apporuser: str, project: str):
-        url = self.vectoratorurl + f"/{self.mainappname + '_' + apporuser}/{project}/"
+    def deleteProjectFromBackend(self, project: str, apporuser: str = ""):
+        url = (
+            self.vectoratorurl
+            + f"/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/"
+        )
         response = requests.delete(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
-    def quicksearch(self, apporuser: str, project: str, query: str) -> ChatMessage:
+    def quicksearch(self, project: str, query: str, apporuser: str = "") -> ChatMessage:
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/quicksearch/{query}"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/quicksearch/{query}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -153,50 +178,52 @@ class VectoratorInteractor:
         return ChatMessage(**response.json())
 
     # Document operations
-    def getDocuments(self, apporuser: str, project: str) -> List[FullDocument]:
+    def getDocuments(self, project: str, apporuser: str = "") -> List[FullDocument]:
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}"
         )
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return [FullDocument(**doc) for doc in response.json()]
 
-    def getDocumentById(self, apporuser: str, project: str, document_id: int):
+    def getDocumentById(self, project: str, document_id: int, apporuser: str = ""):
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/{document_id}"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{document_id}"
         )
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return response.json()
 
-    def deleteDocumentById(self, apporuser: str, project: str, document_id: int):
+    def deleteDocumentById(self, project: str, document_id: int, apporuser: str = ""):
         url = (
             self.vectoratorurl
-            + f"/documents/{self.mainappname + '_' + apporuser}/{project}/{document_id}"
+            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{document_id}"
         )
         response = requests.delete(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
     ### Chat routes
-    def getChats(self, apporuser: str, project: str) -> List[ChatWithMessagesPD]:
+    def getChats(self, project: str, apporuser: str = "") -> List[ChatWithMessagesPD]:
         url = (
             self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/"
+            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/"
         )
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return [ChatWithMessagesPD(**chat) for chat in response.json()]
 
-    def getChat(self, apporuser: str, project: str, chat_id: int) -> ChatWithMessagesPD:
+    def getChat(
+        self, project: str, chat_id: int, apporuser: str = ""
+    ) -> ChatWithMessagesPD:
         url = (
             self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chat_id}"
+            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chat_id}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -204,11 +231,11 @@ class VectoratorInteractor:
         return ChatWithMessagesPD(**response.json())
 
     def getChatByName(
-        self, apporuser: str, project: str, chatname: str
+        self, project: str, chatname: str, apporuser: str = ""
     ) -> ChatWithMessagesPD:
         url = (
             self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/by_name/{chatname}"
+            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/by_name/{chatname}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -216,11 +243,11 @@ class VectoratorInteractor:
         return ChatWithMessagesPD(**response.json())
 
     def getChatStatus(
-        self, apporuser: str, project: str, chat_id: int
+        self, project: str, chat_id: int, apporuser: str = ""
     ) -> ProcessingState:
         url = (
             self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/status/{chat_id}"
+            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/status/{chat_id}"
         )
         response = requests.get(url)
         if not response.ok:
@@ -228,11 +255,11 @@ class VectoratorInteractor:
         return ProcessingState(response.json())
 
     def createChat(
-        self, apporuser: str, project: str, chatname: str
+        self, project: str, chatname: str, apporuser: str = ""
     ) -> ChatWithMessagesPD:
         url = (
             self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chatname}"
+            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chatname}"
         )
 
         response = requests.post(url)
@@ -241,21 +268,21 @@ class VectoratorInteractor:
         return ChatWithMessagesPD(**response.json())
 
     def addMessage(
-        self, apporuser: str, project: str, chat_id: int, message: NewMessagePD
+        self, project: str, chat_id: int, message: NewMessagePD, apporuser: str = ""
     ) -> ChatWithMessagesPD:
         url = (
             self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chat_id}/message"
+            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chat_id}/message"
         )
         response = requests.put(url, json=json.loads(message.model_dump_json()))
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return ChatWithMessagesPD(**response.json())
 
-    def deleteChat(self, apporuser: str, project: str, chat_id: int):
+    def deleteChat(self, project: str, chat_id: int, apporuser: str = ""):
         url = (
             self.vectoratorurl
-            + f"/chat/{self.mainappname + '_' + apporuser}/{project}/{chat_id}"
+            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chat_id}"
         )
         response = requests.delete(url)
         if not response.ok:
@@ -280,7 +307,7 @@ class VectoratorInteractor:
 
     # simplified question route
     def questionWaitUntilFinished(
-        self, apporuser: str, project: str, question: str, chat_id: int = None
+        self, project: str, question: str, apporuser: str = "", chat_id: int = None
     ) -> ChatWithMessagesPD:
         if chat_id is not None:
             message = ChatMessage(
