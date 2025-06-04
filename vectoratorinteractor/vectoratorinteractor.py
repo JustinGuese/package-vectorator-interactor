@@ -16,6 +16,7 @@ from vectoratorinteractor.models import (
     Persona,
     ProcessingState,
     Project,
+    QuickSearchDocument,
 )
 
 
@@ -167,7 +168,9 @@ class VectoratorInteractor:
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
-    def quicksearch(self, project: str, query: str, apporuser: str = "") -> ChatMessage:
+    def quicksearch(
+        self, project: str, query: str, apporuser: str = ""
+    ) -> List[QuickSearchDocument]:
         url = (
             self.vectoratorurl
             + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/quicksearch/{query}"
@@ -175,7 +178,7 @@ class VectoratorInteractor:
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return ChatMessage(**response.json())
+        return [QuickSearchDocument(**doc) for doc in response.json()]
 
     # Document operations
     def getDocuments(self, project: str, apporuser: str = "") -> List[FullDocument]:
@@ -288,22 +291,22 @@ class VectoratorInteractor:
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
-    def simpleQuestion(
-        self,
-        apporuser: str,
-        project: str,
-        question: str,
-    ) -> int:
-        # returns chat id which can be used to query getChat until result
-        new_chat = NewChatPD(
-            name="new chat " + date.today().isoformat(),
-            apporuser=apporuser,
-            project=project,
-            messages=[ChatMessage(message=question, persona=Persona.user)],
-        )
+    # def simpleQuestion(
+    #     self,
+    #     apporuser: str,
+    #     project: str,
+    #     question: str,
+    # ) -> int:
+    #     # returns chat id which can be used to query getChat until result
+    #     new_chat = NewChatPD(
+    #         name="new chat " + date.today().isoformat(),
+    #         apporuser=apporuser,
+    #         project=project,
+    #         messages=[ChatMessage(message=question, persona=Persona.user)],
+    #     )
 
-        chat = self.createChat(apporuser, project, new_chat)
-        return chat.id
+    #     chat = self.createChat(apporuser, project, new_chat)
+    #     return chat.id
 
     # simplified question route
     def questionWaitUntilFinished(

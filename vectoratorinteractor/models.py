@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlmodel import JSON, Column, Field, Relationship, SQLModel
 
 
+
 class ProcessingState(enum.Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
@@ -126,6 +127,15 @@ class LangchainDocumentPD(BaseModel):
     page_number: int | None = None
 
 
+class QuickSearchDocument(BaseModel):
+    score: int
+    filename: str
+    content: str
+    fullcontent: str
+    summary: str
+    timestamp: str
+
+
 class ChatMessageWithDocumentsPD(BaseModel):
     id: int
     message: str
@@ -149,3 +159,4 @@ class NewChatPD(BaseModel):
     apporuser: str
     project: str
     messages: List[ChatMessage] = []
+
