@@ -15,7 +15,7 @@ class ProcessingState(enum.Enum):
 
 
 class Persona(enum.Enum):
-    agent = "agent"
+    assistant = "assistant"
     user = "user"
 
 
