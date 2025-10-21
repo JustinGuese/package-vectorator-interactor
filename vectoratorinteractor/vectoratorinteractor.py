@@ -10,7 +10,7 @@ from vectoratorinteractor.models import (
     ChatWithMessagesPD,
     DocumentUploadRequest,
     DocumentUploadRequestWithDocumentsPD,
-    FullDocument,
+    FullDocumentWithPreview,
     NewChatPD,
     NewMessagePD,
     Persona,
@@ -181,7 +181,9 @@ class VectoratorInteractor:
         return [QuickSearchDocument(**doc) for doc in response.json()]
 
     # Document operations
-    def getDocuments(self, project: str, apporuser: str = "") -> List[FullDocument]:
+    def getDocuments(
+        self, project: str, apporuser: str = ""
+    ) -> List[FullDocumentWithPreview]:
         url = (
             self.vectoratorurl
             + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}"
@@ -189,7 +191,7 @@ class VectoratorInteractor:
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return [FullDocument(**doc) for doc in response.json()]
+        return [FullDocumentWithPreview(**doc) for doc in response.json()]
 
     def getDocumentById(self, project: str, document_id: int, apporuser: str = ""):
         url = (
@@ -199,7 +201,7 @@ class VectoratorInteractor:
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
+        return FullDocumentWithPreview(**response.json())
 
     def deleteDocumentById(self, project: str, document_id: int, apporuser: str = ""):
         url = (

@@ -7,6 +7,11 @@ from pydantic import BaseModel
 from sqlmodel import JSON, Column, Field, Relationship, SQLModel
 
 
+class SummaryStore(SQLModel, table=True):
+    id: Optional[str] = Field(default=None, primary_key=True)
+    summary: str = Field(nullable=False)
+
+
 class ProcessingState(enum.Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
@@ -97,7 +102,7 @@ class DocumentUploadRequestWithDocumentsPD(BaseModel):
     processed: bool
     created_at: datetime
     errormessage: str | None = None
-    documents: List["FullDocument"] = []
+    documents: List["FullDocumentWithPreview"] = []
 
 
 class FullDocument(SQLModel, table=True):
@@ -111,6 +116,16 @@ class FullDocument(SQLModel, table=True):
     project: Project = Relationship(back_populates="documents")
     upload_request_id: int = Field(foreign_key="documentuploadrequest.id")
     upload_request: DocumentUploadRequest = Relationship(back_populates="documents")
+
+
+class FullDocumentWithPreview(BaseModel):
+    id: int | None = None
+    filename: str
+    apporuser: str
+    project_id: int
+    upload_request_id: int
+    cover_url: str | None = None
+    first_page_url: str | None = None
 
 
 class LangchainDocumentPD(BaseModel):
