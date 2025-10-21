@@ -270,6 +270,18 @@ class VectoratorInteractor:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         return ChatWithMessagesPD(**response.json())
 
+    def renameChat(
+        self, project: str, chat_id: int, new_name: str, apporuser: str = ""
+    ) -> ChatWithMessagesPD:
+        url = (
+            self.vectoratorurl
+            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chat_id}/rename"
+        )
+        response = requests.put(url, params={"new_name": new_name})
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return ChatWithMessagesPD(**response.json())
+
     def addMessage(
         self, project: str, chat_id: int, message: NewMessagePD, apporuser: str = ""
     ) -> ChatWithMessagesPD:
@@ -344,3 +356,40 @@ class VectoratorInteractor:
             )
 
         return chat
+
+    def stream_answer(self, apporuser: str, project: str, messages: list[ChatMessage]):
+        url = self.vectoratorurl + f"/stream/{apporuser}/{project}/"
+        response = requests.post(
+            url,
+            json={"messages": [json.loads(m.model_dump_json()) for m in messages]},
+            stream=True,
+        )
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return response.iter_content(chunk_size=None)
+
+    def stream_answer_tokens(
+        self, apporuser: str, project: str, messages: list[ChatMessage]
+    ):
+        url = self.vectoratorurl + f"/stream/{apporuser}/{project}/tokens"
+        response = requests.post(
+            url,
+            json={"messages": [json.loads(m.model_dump_json()) for m in messages]},
+            stream=True,
+        )
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return response.iter_content(chunk_size=None)
+
+    def stream_answer_events(
+        self, apporuser: str, project: str, messages: list[ChatMessage]
+    ):
+        url = self.vectoratorurl + f"/stream/{apporuser}/{project}/events"
+        response = requests.post(
+            url,
+            json={"messages": [json.loads(m.model_dump_json()) for m in messages]},
+            stream=True,
+        )
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return response.iter_content(chunk_size=None)
