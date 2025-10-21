@@ -125,7 +125,7 @@ class FullDocumentWithPreview(BaseModel):
     project_id: int
     upload_request_id: int
     cover_url: str | None = None
-    first_page_url: str | None = None
+    zoomed_in_url: str | None = None
 
 
 class LangchainDocumentPD(BaseModel):
