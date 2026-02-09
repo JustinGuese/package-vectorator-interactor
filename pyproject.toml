@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vectoratorinteractor"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["Justin Guese <guese.justin@gmail.com>"]
 readme = "README.md"

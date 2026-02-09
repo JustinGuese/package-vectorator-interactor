@@ -1,22 +1,18 @@
 import json
-from datetime import date
-from typing import List
+from typing import List, Optional
 
 import requests
 from fastapi import HTTPException, UploadFile
 
 from vectoratorinteractor.models import (
-    ChatMessage,
-    ChatWithMessagesPD,
-    DocumentUploadRequest,
-    DocumentUploadRequestWithDocumentsPD,
-    FullDocumentWithPreview,
-    NewChatPD,
-    NewMessagePD,
-    Persona,
-    ProcessingState,
-    Project,
-    QuickSearchDocument,
+    ChatCreate,
+    ChatMessageResponse,
+    ChatResponse,
+    DocumentResponse,
+    MemoryResponse,
+    MessageCreate,
+    ProjectCreate,
+    ProjectResponse,
 )
 
 
@@ -31,7 +27,18 @@ class VectoratorInteractor:
         self.vectoratorurl = vectoratorurl
         self.apporuserdefault = apporuserdefault
 
-    def __getOrRaiseApporuserConstructor(self, apporuser: str):
+    @property
+    def _api_v1_base(self) -> str:
+        """Base URL for the FastAPI v1 routes."""
+        return self.vectoratorurl.rstrip("/") + "/api/v1"
+
+    def __getOrRaiseApporuserConstructor(self, apporuser: str) -> str:
+        """
+        Historical helper: build the username path segment from mainapp/apporuser.
+
+        We continue to keep this behaviour so existing callers don't need to
+        change anything – the resulting value is used as the FastAPI `username`.
+        """
         if (
             apporuser == ""
             and self.mainappname == "vinteractor"
@@ -45,353 +52,335 @@ class VectoratorInteractor:
         else:
             return self.mainappname + "_" + self.apporuserdefault
 
-    def uploadDocuments(
-        self,
-        project: str,
-        files: List[UploadFile],
-        apporuser: str = "",
-        highresmode: bool = False,
-    ) -> DocumentUploadRequest:
-        url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/upload/"
-        )
-        newFiles = []
-        for f in files:
-            newFiles.append(("upload_files", (f.filename, f.file, f.content_type)))
-
-        response = requests.post(
-            url, files=newFiles, params={"highresmode": highresmode}
-        )
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return DocumentUploadRequest(**response.json())
-
-    def getUploadRequests(
-        self, project: str, apporuser: str = ""
-    ) -> List[DocumentUploadRequestWithDocumentsPD]:
-        url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/uploadrequests"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return [DocumentUploadRequestWithDocumentsPD(**req) for req in response.json()]
-
-    def getUploadRequestById(
-        self, project: str, uploadrequest_id: int, apporuser: str = ""
-    ) -> DocumentUploadRequestWithDocumentsPD:
-        url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/uploadrequests/{uploadrequest_id}"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return DocumentUploadRequestWithDocumentsPD(**response.json())
+    # -------------------------------------------------------------------------
+    # Project operations
+    # -------------------------------------------------------------------------
 
     def getProjects(self, apporuser: str) -> List[str]:
-        url = (
-            self.vectoratorurl
-            + f"/projects/{self.__getOrRaiseApporuserConstructor(apporuser)}/"
-        )
+        """
+        List projects for the (derived) username.
+
+        Backed by: GET /api/v1/users/{username}/projects
+        Returns only the project_name values to keep the old, simple return type.
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects"
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
+        return [p["project_name"] for p in response.json()]
 
-    def createProject(self, project: str, apporuser: str = "") -> Project:
-        url = (
-            self.vectoratorurl
-            + f"/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/"
-        )
-        response = requests.post(url)
+    def createProject(self, project: str, apporuser: str = "") -> ProjectResponse:
+        """
+        Create a new project for the (derived) username.
+
+        Backed by: POST /api/v1/users/{username}/projects
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects"
+        payload = ProjectCreate(project_name=project)
+        response = requests.post(url, json=json.loads(payload.model_dump_json()))
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return Project(**response.json())
+        return ProjectResponse(**response.json())
 
-    def listFiles(self, project: str, apporuser: str = "") -> List[str]:
-        url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/s3files"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
+    def deleteProjectFromBackend(self, project: str, apporuser: str = "") -> None:
+        """
+        Delete a project for the (derived) username.
 
-    def getPresignedUrl(
-        self, project: str, filename: str, apporuser: str = "", validity_days: int = 7
-    ) -> str:
-        url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/presigned_url/{filename}"
-        )
-        response = requests.get(url, params={"validityDays": validity_days})
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.text.replace('"', "")
-
-    def getPdfPagePicture(
-        self, project: str, pdffilename: str, page: int, apporuser: str = ""
-    ):
-        assert pdffilename.endswith(".pdf")
-        justfilename = pdffilename[:-4]
-        if "/" in justfilename:
-            justfilename = justfilename.split("/")[-1]
-        url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/presigned_url/{justfilename}/{page}.png"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.text.replace('"', "")
-
-    def getCoverForBook(self, project: str, filename: str, apporuser: str = "") -> str:
-        url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/presigned_url/{filename + '.png'}"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.text.replace('"', "")
-
-    def deleteProjectFromBackend(self, project: str, apporuser: str = ""):
-        url = (
-            self.vectoratorurl
-            + f"/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/"
-        )
+        Backed by: DELETE /api/v1/users/{username}/projects/{project_name}
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects/{project}"
         response = requests.delete(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
-    def quicksearch(
-        self, project: str, query: str, apporuser: str = ""
-    ) -> List[QuickSearchDocument]:
-        url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/quicksearch/{query}"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return [QuickSearchDocument(**doc) for doc in response.json()]
-
+    # -------------------------------------------------------------------------
     # Document operations
+    # -------------------------------------------------------------------------
+
+    def uploadDocument(
+        self,
+        project: str,
+        file: UploadFile,
+        apporuser: str = "",
+        display_name: Optional[str] = None,
+    ) -> DocumentResponse:
+        """
+        Upload a single document to a project.
+
+        Backed by: POST /api/v1/users/{username}/projects/{project_name}/documents
+
+        Note: the legacy API supported multi-file uploads and various upload
+        request helpers; the new FastAPI app exposes a single-file upload
+        endpoint, so this wrapper now mirrors that behaviour.
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects/{project}/documents"
+
+        files = {"file": (file.filename, file.file, file.content_type)}
+        data: dict = {}
+        if display_name is not None:
+            data["display_name"] = display_name
+
+        response = requests.post(url, files=files, data=data)
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return DocumentResponse(**response.json())
+
     def getDocuments(
-        self, project: str, apporuser: str = ""
-    ) -> List[FullDocumentWithPreview]:
+        self, project: str, apporuser: str = "", limit: int = 50, offset: int = 0
+    ) -> List[DocumentResponse]:
+        """
+        List documents for a project.
+
+        Backed by: GET /api/v1/users/{username}/projects/{project_name}/documents
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects/{project}/documents"
+        response = requests.get(url, params={"limit": limit, "offset": offset})
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return [DocumentResponse(**doc) for doc in response.json()]
+
+    def getDocumentById(
+        self, project: str, document_id: int, apporuser: str = ""
+    ) -> DocumentResponse:
+        """
+        Get a single document by ID.
+
+        Backed by:
+          GET /api/v1/users/{username}/projects/{project_name}/documents/{document_id}
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
         url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}"
+            f"{self._api_v1_base}/users/{username}/projects/{project}/documents/"
+            f"{document_id}"
         )
         response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return [FullDocumentWithPreview(**doc) for doc in response.json()]
+        return DocumentResponse(**response.json())
 
-    def getDocumentById(self, project: str, document_id: int, apporuser: str = ""):
-        url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{document_id}"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return FullDocumentWithPreview(**response.json())
+    def deleteDocumentById(
+        self, project: str, document_id: int, apporuser: str = ""
+    ) -> None:
+        """
+        Delete a document by ID.
 
-    def deleteDocumentById(self, project: str, document_id: int, apporuser: str = ""):
+        Backed by:
+          DELETE /api/v1/users/{username}/projects/{project_name}/documents/{document_id}
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
         url = (
-            self.vectoratorurl
-            + f"/documents/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{document_id}"
+            f"{self._api_v1_base}/users/{username}/projects/{project}/documents/"
+            f"{document_id}"
         )
         response = requests.delete(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
-    ### Chat routes
-    def getChats(self, project: str, apporuser: str = "") -> List[ChatWithMessagesPD]:
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return [ChatWithMessagesPD(**chat) for chat in response.json()]
+    # -------------------------------------------------------------------------
+    # Chat & message routes
+    # -------------------------------------------------------------------------
 
-    def getChat(
-        self, project: str, chat_id: int, apporuser: str = ""
-    ) -> ChatWithMessagesPD:
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chat_id}"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return ChatWithMessagesPD(**response.json())
+    def getChats(
+        self, project: str, apporuser: str = "", limit: int = 50, offset: int = 0
+    ) -> List[ChatResponse]:
+        """
+        List chats for a project.
 
-    def getChatByName(
-        self, project: str, chatname: str, apporuser: str = ""
-    ) -> ChatWithMessagesPD:
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/by_name/{chatname}"
-        )
-        response = requests.get(url)
+        Backed by: GET /api/v1/users/{username}/projects/{project_name}/chats
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects/{project}/chats"
+        response = requests.get(url, params={"limit": limit, "offset": offset})
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return ChatWithMessagesPD(**response.json())
-
-    def getChatStatus(
-        self, project: str, chat_id: int, apporuser: str = ""
-    ) -> ProcessingState:
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/status/{chat_id}"
-        )
-        response = requests.get(url)
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return ProcessingState(response.json())
+        return [ChatResponse(**chat) for chat in response.json()]
 
     def createChat(
         self, project: str, chatname: str, apporuser: str = ""
-    ) -> ChatWithMessagesPD:
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chatname}"
-        )
+    ) -> ChatResponse:
+        """
+        Create a chat in a project.
 
-        response = requests.post(url)
+        Backed by: POST /api/v1/users/{username}/projects/{project_name}/chats
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects/{project}/chats"
+        payload = ChatCreate(chat_name=chatname)
+        response = requests.post(url, json=json.loads(payload.model_dump_json()))
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return ChatWithMessagesPD(**response.json())
+        return ChatResponse(**response.json())
 
-    def renameChat(
-        self, project: str, chat_id: int, new_name: str, apporuser: str = ""
-    ) -> ChatWithMessagesPD:
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chat_id}/rename"
-        )
-        response = requests.put(url, params={"new_name": new_name})
+    def getChat(
+        self, project: str, chatname: str, apporuser: str = ""
+    ) -> ChatResponse:
+        """
+        Get a single chat (metadata only).
+
+        Backed by:
+          GET /api/v1/users/{username}/projects/{project_name}/chats/{chat_name}
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects/{project}/chats/{chatname}"
+        response = requests.get(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return ChatWithMessagesPD(**response.json())
+        return ChatResponse(**response.json())
 
-    def addMessage(
-        self, project: str, chat_id: int, message: NewMessagePD, apporuser: str = ""
-    ) -> ChatWithMessagesPD:
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chat_id}/message"
-        )
-        response = requests.put(url, json=json.loads(message.model_dump_json()))
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return ChatWithMessagesPD(**response.json())
+    def deleteChat(self, project: str, chatname: str, apporuser: str = "") -> None:
+        """
+        Delete a chat.
 
-    def deleteChat(self, project: str, chat_id: int, apporuser: str = ""):
-        url = (
-            self.vectoratorurl
-            + f"/chat/{self.__getOrRaiseApporuserConstructor(apporuser)}/{project}/{chat_id}"
-        )
+        Backed by:
+          DELETE /api/v1/users/{username}/projects/{project_name}/chats/{chat_name}
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects/{project}/chats/{chatname}"
         response = requests.delete(url)
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
-    # def simpleQuestion(
-    #     self,
-    #     apporuser: str,
-    #     project: str,
-    #     question: str,
-    # ) -> int:
-    #     # returns chat id which can be used to query getChat until result
-    #     new_chat = NewChatPD(
-    #         name="new chat " + date.today().isoformat(),
-    #         apporuser=apporuser,
-    #         project=project,
-    #         messages=[ChatMessage(message=question, persona=Persona.user)],
-    #     )
+    def sendMessage(
+        self,
+        project: str,
+        chatname: str,
+        content: str,
+        apporuser: str = "",
+        stream: bool = False,
+    ) -> ChatMessageResponse | requests.Response:
+        """
+        Send a message to a chat and get a bot response.
 
-    #     chat = self.createChat(apporuser, project, new_chat)
-    #     return chat.id
+        Backed by:
+          POST /api/v1/users/{username}/projects/{project_name}/chats/{chat_name}/messages?stream=...
 
-    # simplified question route
-    def questionWaitUntilFinished(
-        self, project: str, question: str, apporuser: str = "", chat_id: int = None
-    ) -> ChatWithMessagesPD:
-        if chat_id is not None:
-            message = ChatMessage(
-                chat_id=chat_id, message=question, persona=Persona.user
+        If `stream=True`, the raw `requests.Response` is returned so callers can
+        iterate over the NDJSON stream (`iter_lines`, etc.). Otherwise, this
+        returns a parsed `ChatMessageResponse`.
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = (
+            f"{self._api_v1_base}/users/{username}/projects/{project}/chats/"
+            f"{chatname}/messages"
+        )
+        payload = MessageCreate(content=content)
+
+        if stream:
+            response = requests.post(
+                url,
+                params={"stream": "true"},
+                json=json.loads(payload.model_dump_json()),
+                stream=True,
             )
-            chat = self.addMessage(apporuser, project, message)
-        else:
-            new_chat = NewChatPD(
-                name="new chat " + date.today().isoformat(),
-                apporuser=apporuser,
-                project=project,
-                messages=[ChatMessage(message=question, persona=Persona.user)],
-            )
-            chat = self.createChat(apporuser, project, new_chat)
+            if not response.ok:
+                raise HTTPException(
+                    status_code=response.status_code, detail=response.text
+                )
+            return response
 
-        maxtries = 30
-        crntTry = 0
-        while chat.processing_state != ProcessingState.DONE and crntTry < maxtries:
-            # Use the new getChatStatus endpoint for efficiency
-            status = self.getChatStatus(apporuser, project, chat.id)
-            if status == ProcessingState.DONE:
-                break
-            crntTry += 1
-
-        # Fetch the full chat once the status is DONE or we've reached max tries
-        chat = self.getChat(apporuser, project, chat.id)
-
-        if chat.processing_state != ProcessingState.DONE:
-            raise HTTPException(
-                status_code=408, detail="Request timeout while processing chat"
-            )
-
-        return chat
-
-    def stream_answer(self, apporuser: str, project: str, messages: list[ChatMessage]):
-        url = self.vectoratorurl + f"/stream/{apporuser}/{project}/"
         response = requests.post(
             url,
-            json={"messages": [json.loads(m.model_dump_json()) for m in messages]},
-            stream=True,
+            params={"stream": "false"},
+            json=json.loads(payload.model_dump_json()),
         )
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.iter_content(chunk_size=None)
+        return ChatMessageResponse(**response.json())
 
-    def stream_answer_tokens(
-        self, apporuser: str, project: str, messages: list[ChatMessage]
+    def getMessages(
+        self,
+        project: str,
+        chatname: str,
+        apporuser: str = "",
+        limit: int = 50,
+        offset: int = 0,
     ):
-        url = self.vectoratorurl + f"/stream/{apporuser}/{project}/tokens"
-        response = requests.post(
-            url,
-            json={"messages": [json.loads(m.model_dump_json()) for m in messages]},
-            stream=True,
-        )
-        if not response.ok:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.iter_content(chunk_size=None)
+        """
+        Get messages for a chat with citations.
 
-    def stream_answer_events(
-        self, apporuser: str, project: str, messages: list[ChatMessage]
-    ):
-        url = self.vectoratorurl + f"/stream/{apporuser}/{project}/events"
-        response = requests.post(
-            url,
-            json={"messages": [json.loads(m.model_dump_json()) for m in messages]},
-            stream=True,
+        Backed by:
+          GET /api/v1/users/{username}/projects/{project_name}/chats/{chat_name}/messages
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = (
+            f"{self._api_v1_base}/users/{username}/projects/{project}/chats/"
+            f"{chatname}/messages"
         )
+        response = requests.get(url, params={"limit": limit, "offset": offset})
         if not response.ok:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.iter_content(chunk_size=None)
+        # We intentionally return the raw JSON list so callers can decide how to
+        # map it (it matches the backend's `MessageResponse` schema).
+        return response.json()
+
+    # -------------------------------------------------------------------------
+    # Long‑term memories
+    # -------------------------------------------------------------------------
+
+    def listMemories(
+        self,
+        project: str,
+        apporuser: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[MemoryResponse]:
+        """
+        List long‑term memories for a project.
+
+        Backed by:
+          GET /api/v1/users/{username}/projects/{project_name}/memories
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = (
+            f"{self._api_v1_base}/users/{username}/projects/{project}/memories"
+        )
+        response = requests.get(url, params={"limit": limit, "offset": offset})
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return [MemoryResponse(**item) for item in response.json()]
+
+    def searchMemories(
+        self,
+        project: str,
+        query: str,
+        apporuser: str = "",
+        limit: int = 10,
+    ) -> List[MemoryResponse]:
+        """
+        Semantic search over memories for a project.
+
+        Backed by:
+          POST /api/v1/users/{username}/projects/{project_name}/memories/search
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = (
+            f"{self._api_v1_base}/users/{username}/projects/{project}/memories/search"
+        )
+        body = {"query": query}
+        response = requests.post(url, json=body, params={"limit": limit})
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return [MemoryResponse(**item) for item in response.json()]
+
+    def deleteMemory(
+        self, project: str, memory_key: str, apporuser: str = ""
+    ) -> None:
+        """
+        Delete a specific memory by key.
+
+        Backed by:
+          DELETE /api/v1/users/{username}/projects/{project_name}/memories/{memory_key}
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = (
+            f"{self._api_v1_base}/users/{username}/projects/{project}/memories/"
+            f"{memory_key}"
+        )
+        response = requests.delete(url)
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
