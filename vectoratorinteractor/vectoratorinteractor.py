@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import List, Optional
 
 import requests
@@ -7,12 +8,21 @@ from fastapi import HTTPException, UploadFile
 from vectoratorinteractor.models import (
     ChatCreate,
     ChatMessageResponse,
+    ChatMessageWithDocumentsPD,
     ChatResponse,
+    ChatWithMessagesPD,
     DocumentResponse,
+    DocumentUploadRequest,
+    DocumentUploadRequestWithDocumentsPD,
+    FullDocumentWithPreview,
     MemoryResponse,
     MessageCreate,
+    NewMessagePD,
+    Persona,
+    ProcessingState,
     ProjectCreate,
     ProjectResponse,
+    QuickSearchDocument,
 )
 
 
@@ -182,6 +192,126 @@ class VectoratorInteractor:
             raise HTTPException(status_code=response.status_code, detail=response.text)
 
     # -------------------------------------------------------------------------
+    # Legacy/compat document & file helpers
+    # -------------------------------------------------------------------------
+
+    def uploadDocuments(
+        self,
+        project: str,
+        files: List[UploadFile],
+        apporuser: str = "",
+        highresmode: bool = False,  # kept for signature compatibility; ignored
+    ) -> DocumentUploadRequest:
+        """
+        Backwards-compatible multi-file upload helper.
+
+        Internally calls the single-file /api/v1 upload endpoint once per file
+        and aggregates the results into a DocumentUploadRequest-like object.
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+
+        uploaded_docs: List[FullDocumentWithPreview] = []
+        for f in files:
+            doc_resp = self.uploadDocument(
+                project=project,
+                file=f,
+                apporuser=apporuser,
+                display_name=f.filename,
+            )
+            uploaded_docs.append(
+                FullDocumentWithPreview(
+                    id=doc_resp.id,
+                    filename=doc_resp.file_name,
+                    apporuser=username,
+                    project_id=doc_resp.project_id,
+                    upload_request_id=0,
+                    cover_url=None,
+                    zoomed_in_url=None,
+                )
+            )
+
+        now = None
+        upload_request = DocumentUploadRequest(
+            id=None,
+            apporuser=username,
+            project=project,
+            processed=True,
+            created_at=now,
+            errormessage=None,
+        )
+
+        # For callers that used getUploadRequests/getUploadRequestById, we at
+        # least provide a single synthetic request containing all docs.
+        self._last_upload_request = DocumentUploadRequestWithDocumentsPD(
+            id=0,
+            apporuser=username,
+            project=project,
+            processed=True,
+            created_at=now or now,
+            errormessage=None,
+            documents=uploaded_docs,
+        )
+
+        return upload_request
+
+    def getUploadRequests(
+        self, project: str, apporuser: str = ""
+    ) -> List[DocumentUploadRequestWithDocumentsPD]:
+        """
+        Compatibility stub for old upload request listing.
+
+        The new backend no longer exposes upload-request entities, so we return
+        at most the last synthetic request created via uploadDocuments().
+        """
+        if hasattr(self, "_last_upload_request"):
+            return [self._last_upload_request]  # type: ignore[attr-defined]
+        return []
+
+    def getUploadRequestById(
+        self, project: str, uploadrequest_id: int, apporuser: str = ""
+    ) -> DocumentUploadRequestWithDocumentsPD:
+        """
+        Compatibility stub for fetching a single upload request.
+        """
+        for req in self.getUploadRequests(project, apporuser):
+            if req.id == uploadrequest_id:
+                return req
+        raise HTTPException(status_code=404, detail="Upload request not found")
+
+    def listFiles(self, project: str, apporuser: str = "") -> List[str]:
+        """
+        Legacy helper that returns just the filenames for a project's documents.
+        """
+        docs = self.getDocuments(project, apporuser=apporuser)
+        return [d.file_name for d in docs]
+
+    def getPresignedUrl(
+        self, project: str, filename: str, apporuser: str = "", validity_days: int = 7
+    ) -> str:
+        """
+        The new FastAPI backend exposes preview/download endpoints instead of
+        raw S3 presigned URLs; this method is no longer backed by the service.
+        """
+        raise HTTPException(
+            status_code=501,
+            detail="getPresignedUrl is not implemented against the new /api/v1 backend.",
+        )
+
+    def getPdfPagePicture(
+        self, project: str, pdffilename: str, page: int, apporuser: str = ""
+    ) -> str:
+        raise HTTPException(
+            status_code=501,
+            detail="getPdfPagePicture is not implemented against the new /api/v1 backend.",
+        )
+
+    def getCoverForBook(self, project: str, filename: str, apporuser: str = "") -> str:
+        raise HTTPException(
+            status_code=501,
+            detail="getCoverForBook is not implemented against the new /api/v1 backend.",
+        )
+
+    # -------------------------------------------------------------------------
     # Chat & message routes
     # -------------------------------------------------------------------------
 
@@ -317,6 +447,178 @@ class VectoratorInteractor:
         # We intentionally return the raw JSON list so callers can decide how to
         # map it (it matches the backend's `MessageResponse` schema).
         return response.json()
+
+    # -------------------------------------------------------------------------
+    # Legacy/compat chat & Q&A helpers
+    # -------------------------------------------------------------------------
+
+    def getChatStatus(
+        self, project: str, chat_id: int, apporuser: str = ""
+    ) -> ProcessingState:
+        """
+        Legacy status helper. The new backend answers synchronously, so we
+        simply report DONE for any known chat id and raise if not found.
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        url = f"{self._api_v1_base}/users/{username}/projects/{project}/chats"
+        response = requests.get(url, params={"limit": 100, "offset": 0})
+        if not response.ok:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        chats = response.json()
+        if any(c.get("id") == chat_id for c in chats):
+            return ProcessingState.DONE
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    def addMessage(
+        self, project: str, chat_id: int, message: NewMessagePD, apporuser: str = ""
+    ) -> ChatWithMessagesPD:
+        """
+        Compatibility wrapper that sends a message by chat id using the
+        name-based /api/v1 messages endpoint and maps the result to
+        ChatWithMessagesPD.
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+        # Resolve chat_name from id
+        chats = self.getChats(project, apporuser=apporuser)
+        chat = next((c for c in chats if c.id == chat_id), None)
+        if chat is None:
+            raise HTTPException(status_code=404, detail="Chat not found")
+
+        content = message.message
+        resp = self.sendMessage(
+            project=project,
+            chatname=chat.chat_name,
+            content=content,
+            apporuser=apporuser,
+            stream=False,
+        )
+
+        return self._chat_from_message_response(
+            username=username,
+            project=project,
+            chat_name=chat.chat_name,
+            chat_id=chat.id,
+            msg_resp=resp,
+        )
+
+    def questionWaitUntilFinished(
+        self, project: str, question: str, apporuser: str = "", chat_id: int | None = None
+    ) -> ChatWithMessagesPD:
+        """
+        Legacy \"ask a question and wait\" helper.
+
+        The new backend answers synchronously, so we send a single message and
+        immediately return a ChatWithMessagesPD with processing_state=DONE.
+        """
+        username = self.__getOrRaiseApporuserConstructor(apporuser)
+
+        if chat_id is None:
+            # Create a new chat with a generated name
+            chat_name = f"chat-{datetime.utcnow().isoformat()}"
+            chat = self.createChat(project=project, chatname=chat_name, apporuser=apporuser)
+            chat_id = chat.id
+        else:
+            # Resolve chat name from id
+            chats = self.getChats(project, apporuser=apporuser)
+            chat = next((c for c in chats if c.id == chat_id), None)
+            if chat is None:
+                raise HTTPException(status_code=404, detail="Chat not found")
+            chat_name = chat.chat_name
+
+        msg = NewMessagePD(message=question, persona=Persona.user)
+        resp = self.sendMessage(
+            project=project,
+            chatname=chat_name,
+            content=msg.message,
+            apporuser=apporuser,
+            stream=False,
+        )
+
+        return self._chat_from_message_response(
+            username=username,
+            project=project,
+            chat_name=chat_name,
+            chat_id=chat_id,
+            msg_resp=resp,
+        )
+
+    def _chat_from_message_response(
+        self,
+        username: str,
+        project: str,
+        chat_name: str,
+        chat_id: int,
+        msg_resp: ChatMessageResponse,
+    ) -> ChatWithMessagesPD:
+        """
+        Helper to build a legacy ChatWithMessagesPD from a ChatMessageResponse.
+        """
+        user = msg_resp.user_message
+        bot = msg_resp.bot_message
+
+        user_msg_pd = ChatMessageWithDocumentsPD(
+            id=user.id,
+            message=user.content,
+            persona=Persona.user,
+            created_at=user.created_at,
+            documents=[],
+        )
+        bot_msg_pd = ChatMessageWithDocumentsPD(
+            id=bot.id,
+            message=bot.content,
+            persona=Persona.assistant,
+            created_at=bot.created_at,
+            documents=[],
+        )
+
+        return ChatWithMessagesPD(
+            id=chat_id,
+            name=chat_name,
+            apporuser=username,
+            project=project,
+            created_at=user.created_at,
+            processing_state=ProcessingState.DONE,
+            messages=[user_msg_pd, bot_msg_pd],
+        )
+
+    def quicksearch(
+        self, project: str, query: str, apporuser: str = ""
+    ) -> List[QuickSearchDocument]:
+        """
+        Legacy quicksearch helper.
+
+        The current backend does not expose a direct quicksearch endpoint;
+        callers should migrate to RAG chat instead. This method is kept only
+        for API compatibility and always raises 501.
+        """
+        raise HTTPException(
+            status_code=501,
+            detail="quicksearch is not implemented against the new /api/v1 backend.",
+        )
+
+    # Stream helpers from the old API are not available on the new backend.
+
+    def stream_answer(self, apporuser: str, project: str, messages: list[NewMessagePD]):
+        raise HTTPException(
+            status_code=501,
+            detail="stream_answer is not implemented against the new /api/v1 backend.",
+        )
+
+    def stream_answer_tokens(
+        self, apporuser: str, project: str, messages: list[NewMessagePD]
+    ):
+        raise HTTPException(
+            status_code=501,
+            detail="stream_answer_tokens is not implemented against the new /api/v1 backend.",
+        )
+
+    def stream_answer_events(
+        self, apporuser: str, project: str, messages: list[NewMessagePD]
+    ):
+        raise HTTPException(
+            status_code=501,
+            detail="stream_answer_events is not implemented against the new /api/v1 backend.",
+        )
 
     # -------------------------------------------------------------------------
     # Long‑term memories
